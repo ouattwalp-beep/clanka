@@ -1,0 +1,16 @@
+{
+  "name": "clanka",
+  "module": "src",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun .",
+    "typecheck": "bun check"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  }
+}
