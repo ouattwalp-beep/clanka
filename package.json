@@ -1,17 +1,13 @@
 {
   "name": "clanka",
-  "module": "src",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
   "scripts": {
     "start": "bun .",
-    "typecheck": "bun check"
+    "typecheck": "bun tsc --noEmit"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "openai": "^7.62.0"
-  },
-  "peerDependencies": {
-    "typescript": "^7"
+    "@types/bun": "latest"
   }
 }

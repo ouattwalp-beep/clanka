@@ -1,17 +1,30 @@
-import type {ChatCompletionTool} from 'openai/resources'
+import type { ToolDefinition, ToolContext } from '../types';
+import shellData from './shell';
 
-// https://json-schema.org/understanding-json-schema/reference/array
-export const tools: ChatCompletionTool[] = []
+const tools = new Map<string, ToolDefinition>();
 
-const functions: {[name: string]: Function} = {}
-
-export function add(tool: {data: ChatCompletionTool, default: Function}) {
-    tools.push(tool.data)
-    functions[tool.data.type === 'function' ? tool.data.function.name : tool.data.custom.name] = tool.default
+export function register(tool: ToolDefinition) {
+    tools.set(tool.name, tool);
 }
 
-export async function run(name: string, ...args: any) {
-    return functions[name]?.(...args)
+export function get(name: string): ToolDefinition | undefined {
+    return tools.get(name);
 }
 
-add(await import('./shell'))
+export function list(): ToolDefinition[] {
+    return [...tools.values()];
+}
+
+export async function run(name: string, args: Record<string, any>, ctx: ToolContext): Promise<string> {
+    const tool = tools.get(name);
+    if (!tool) {
+        return JSON.stringify({ error: `unknown tool: ${name}` });
+    }
+    try {
+        return await tool.handler(args, ctx);
+    } catch (err: any) {
+        return JSON.stringify({ error: err?.message ?? String(err) });
+    }
+}
+
+register(shellData);
