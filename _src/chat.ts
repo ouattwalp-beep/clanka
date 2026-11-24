@@ -1,56 +1,31 @@
-// https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create/
-import type {
-    ChatCompletionCreateParamsStreaming as ChatCompletionCreateParams,
-    ChatCompletionChunk,
-    ChatCompletion,
-
-    ChatCompletionMessageToolCall, ChatCompletionMessageFunctionToolCall, ChatCompletionMessageCustomToolCall,
-} from 'openai/resources'
-
-export default class Chat {
-    baseURL
-    apiKey
-
-    model
-    messages
-    tools
-
-    params
+export class Client {
+    endpoint
+    apiKeys
 
     constructor({
-        baseURL = process.env.OPENAI_BASE_URL || 'https://integrate.api.nvidia.com/v1', 
-        apiKey = process.env.OPENAI_API_KEY,
-
-        model = 'nvidia/nemotron-3.5-super-vl-120b-a12b',
-        messages = [],
-        tools,
-
-        ...params
-    }: Partial<ChatCompletionCreateParams> & {
-        baseURL?: string,
-        apiKey?: string
-    } = {} as any) {
-        this.baseURL = baseURL
-        this.apiKey = apiKey
-
-        this.model = model
-        this.messages = messages
-        this.tools = tools
-
-        this.params = params
+        endpoint = 'https://integrate.api.nvidia.com/v1',
+        apiKeys
+    }: {
+        endpoint?: string,
+        apiKeys: string[]
+    }) {
+        this.endpoint = endpoint
+        this.apiKeys = apiKeys
     }
 
-    fetch(resource: string, body?: any) {
-        return fetch(`${this.baseURL}/${resource}`, {
+    async fetch(resource: string, body?: any) {
+        const response = await fetch(`https://integrate.api.nvidia.com/v1/${resource}`, {
             headers: {
-                authorization: `Bearer ${this.apiKey}`
+                authorization: `Bearer ${this.apiKeys[0]}`
             },
             method: body ? 'POST' : 'GET',
             body: body ? JSON.stringify(body) : undefined
         })
+
+        return response
     }
 
-    static async *stream(readableStream: ReadableStream) {
+    static async *stream<T>(readableStream: ReadableStream) {
         let buffer = ''
 
         const textDecoder = new TextDecoder
@@ -65,17 +40,56 @@ export default class Chat {
             for (const event of events) {
                 const separator = event.indexOf(':')
 
+                const name = event.slice(0, separator)
+
+                if (name !== 'data')
+                    continue
+
                 const data = event.slice(separator + 2)
 
                 if (!data)
                     continue
-
+                
                 if (data === '[DONE]')
-                    return
-
-                yield JSON.parse(data)
+                    continue
+                
+                yield JSON.parse(data) as T
             }
         }
+    }
+}
+
+import type {
+    ChatCompletionCreateParams,
+    ChatCompletionChunk,
+
+    ChatCompletionMessageToolCall,
+    ChatCompletionMessageFunctionToolCall,
+    ChatCompletionMessageCustomToolCall,
+
+    ChatCompletion
+} from 'openai/resources'
+
+// https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create/
+export class Chat {
+    model
+    messages
+    tools
+
+    params
+
+    constructor({
+        model = 'nvidia/nemotron-3.5-super-vl-120b-a12b',
+        messages = [],
+        tools,
+
+        ...params
+    }: Partial<ChatCompletionCreateParams> = {}) {
+        this.model = model
+        this.messages = messages
+        this.tools = tools
+
+        this.params = params
     }
 
     static parseCompletionChunk(
@@ -145,10 +159,10 @@ export default class Chat {
                     messageChoice.message.tool_calls = tool_calls = []
 
                 for (const tool_call of delta.tool_calls) {
-                    let choiceToolCall = tool_calls[tool_call.index]!
+                    let choiceToolCall = tool_calls[tool_call.index]
 
                     if (!choiceToolCall)
-                        tool_calls[tool_call.index] = choiceToolCall = {} as any
+                        tool_calls[tool_call.index] = choiceToolCall = {} as NonNullable<typeof choiceToolCall>
 
                     if (tool_call.id)
                         choiceToolCall.id = tool_call.id
@@ -157,10 +171,10 @@ export default class Chat {
                         choiceToolCall.type = tool_call.type
 
                     if (tool_call.function) {
-                        let function_call = choiceToolCall.function!
+                        let function_call = choiceToolCall.function
                         
                         if (!function_call)
-                            choiceToolCall.function = function_call = {} as any
+                            choiceToolCall.function = function_call = {} as NonNullable<typeof function_call>
 
                         if (tool_call.function.name)
                             if (function_call.name)
@@ -176,10 +190,10 @@ export default class Chat {
                     }
 
                     if (tool_call.custom) {
-                        let custom_call = choiceToolCall.custom!
+                        let custom_call = choiceToolCall.custom
                         
                         if (!custom_call)
-                            choiceToolCall.custom = custom_call = {} as any
+                            choiceToolCall.custom = custom_call = {} as NonNullable<typeof custom_call>
 
                         if (tool_call.custom.name)
                             if (custom_call.name)
@@ -197,7 +211,7 @@ export default class Chat {
             }
         }
     }
-
+    
     async completion(messages: ChatCompletionCreateParams['messages'], stream?: typeof Chat.parseCompletionChunk) {
         const response = await this.fetch('chat/completions', {
             ...this.params,
@@ -222,7 +236,7 @@ export default class Chat {
         }
 
         if (response.body)
-            for await (const chunk of Chat.stream(response.body) as AsyncGenerator<Parameters<typeof Chat.parseCompletionChunk>[0]>) {
+            for await (const chunk of Client.stream<Parameters<typeof Chat.parseCompletionChunk>[0]>(response.body)) {
                 await stream?.(chunk, completion)
                 Chat.parseCompletionChunk(chunk, completion)
             }
